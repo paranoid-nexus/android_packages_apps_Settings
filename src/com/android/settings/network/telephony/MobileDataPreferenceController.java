@@ -47,6 +47,7 @@ import androidx.preference.PreferenceScreen;
 import androidx.preference.TwoStatePreference;
 
 import com.android.settings.R;
+import com.android.settings.datausage.DataUsageUtils;
 import com.android.settings.flags.Flags;
 import com.android.settings.network.MobileNetworkRepository;
 import com.android.settings.wifi.WifiPickerTrackerHelper;
@@ -76,6 +77,7 @@ public class MobileDataPreferenceController extends TelephonyTogglePreferenceCon
     int mDialogType;
     @VisibleForTesting
     boolean mNeedDialog;
+    boolean mIsInSetupWizard;
 
     private WifiPickerTrackerHelper mWifiPickerTrackerHelper;
     protected MobileNetworkRepository mMobileNetworkRepository;
@@ -93,9 +95,10 @@ public class MobileDataPreferenceController extends TelephonyTogglePreferenceCon
     private SparseBooleanArray mIsImsRegisteredOnCiwlan;
 
     public MobileDataPreferenceController(Context context, String key, Lifecycle lifecycle,
-            LifecycleOwner lifecycleOwner, int subId) {
+            LifecycleOwner lifecycleOwner, int subId, boolean isInSetupWizard) {
         this(context, key);
         mSubId = subId;
+        mIsInSetupWizard = isInSetupWizard;
         mLifecycleOwner = lifecycleOwner;
         if (lifecycle != null) {
             lifecycle.addObserver(this);
@@ -110,9 +113,13 @@ public class MobileDataPreferenceController extends TelephonyTogglePreferenceCon
 
     @Override
     public int getAvailabilityStatus(int subId) {
-        return subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID
-                ? AVAILABLE
-                : AVAILABLE_UNSEARCHABLE;
+        if ((Flags.isDualSimOnboardingEnabled() && !mIsInSetupWizard)
+                || mSubscriptionManager.getActiveSubscriptionInfo(subId) == null
+                || !mSubscriptionManager.isUsableSubscriptionId(subId)
+                || !DataUsageUtils.hasMobileData(mContext)) {
+            return CONDITIONALLY_UNAVAILABLE;
+        }
+        return AVAILABLE;
     }
 
     @Override
@@ -201,6 +208,7 @@ public class MobileDataPreferenceController extends TelephonyTogglePreferenceCon
             return;
         }
 
+        mPreference.setVisible(isAvailable());
         mPreference.setChecked(isChecked());
         if (mSubscriptionInfoEntity.isOpportunistic) {
             mPreference.setEnabled(false);
